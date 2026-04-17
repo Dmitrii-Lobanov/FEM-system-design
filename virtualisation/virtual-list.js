@@ -1,105 +1,61 @@
-import {intersectionObserver} from "../../../utils/observer.js";
-
-/**
- * Standard Margin between cards
- * @type {number}
- */
-const MARGIN = 16;
-
-/**
- * Returns top and bottom observer elements
- * @returns {[HTMLElement,HTMLElement]}
- */
-const getObservers = () => [
-    document.getElementById('top-observer'),
-    document.getElementById('bottom-observer')
-]
-
-/**
- * Returns a virtual list container
- * @returns {HTMLElement}
- */
-function getVirtualList() {
+import {intersectionObserver} from "./utils/observer.js";
+function getObservers() {
+    return [
+        document.getElementById('bottom-observer'),
+        document.getElementById('top-observer')
+    ];
+}
+function getList() {
     return document.getElementById('virtual-list');
 }
 
 /**
- * Returns a main app container
- * @returns {HTMLElement}
- */
-function getContainer() {
-    return document.getElementById('container');
-}
-
-/**
- * Returns `data-y` attribute of the HTMLElement, if value is provided
- * additionally updates the attribute
+ * Part 4 - Creating element pool - Preparation phase
  *
- * @param element {HTMLElement}
- * @param value {string | number}
- * @returns {?number}
+ * 1. Create an array - pool - as a state variable
+ * 2. Define poolLimit variable which is equal pageSize * 2
+ * 3. Update #handleBottomObserver
+ *   - When pool size exceeds limit - push items [0, pageSize] to the end
+ *   - Update items with a new method - updateData - it should cycle through elements that were moved
+ *     and call the template update callback
+ *   - Increase -start- counter by 1 since we moved to page + 1
  */
-function y(element, value = undefined) {
-    if (value != null) {
-        element?.setAttribute('data-y', value);
-    }
-    const y = element?.getAttribute('data-y');
-    if(y !== '' && y != null && +y === +y) {
-        return +y;
-    }
-    return null;
-}
 
-/**
- * Returns a CSS Transform Style string to Move Element by certain amount of pixels
- * @param value      - value in pixels
- * @returns {string}
- */
-function translateY(value) {
-    return `translateY(${value}px)`;
-}
-
-/**
- * Starter skeleton
- */
 export class VirtualList {
     /**
-     * @param root
+     * @param root {HTMLElement}
      * @param props {{
-     *     getPage: <T>(p: number) => Promise<T[]>,
-     *     getTemplate: <T>(datum: T) => HTMLElement,
-     *     updateTemplate: <T>(datum: T, element: HTMLElement) => HTMLElement,
-     *     pageSize: number
+     *    getPage: <T>(page: number) => Promise<T[]>,
+     *    pageSize: number,
+     *    getTemplate: (...args:any) => HTMLElement,
+     *    updateTemplate: <T>(target: HTMLElement, datum:T) => void,
      * }}
      */
     constructor(root, props) {
         this.props = {...props};
         this.root = root;
+        this.start = 0;
+        this.end = 0;
     }
-
     /**
      * Returns an HTML Representation of the component, should have the following structure:
-     * #container>
-     *    #top-observer+
+     * #container >
+     *    .top-observer+
      *    #virtual-list+
      *    #bottom-observer
      * @returns {string}
      */
     toHTML() {
-        /**
-         * Part 1 - App Skeleton
-         *  @todo
-         */
-        return ``.trim();
+        return `<div id="container">
+        <div id="top-observer">Top Observer</div>
+        <main id="virtual-list"></main>
+        <div id="bottom-observer">Bottom Observer</div>
+        </div>`.trim();
     }
 
     /**
-     * @returns void
-     */
-    #effect() {
-    }
-
-    /**
+     * Renders the content to the provided root container and runs
+     * any additional side effects
      * @returns void
      */
     render() {
@@ -108,37 +64,53 @@ export class VirtualList {
     }
 
     /**
-     * Handles observer intersection entries
-     * @param entries {IntersectionObserverEntry[]}
+     * Registers Events / Observers, this function is run after initial render
+     * @returns void
      */
-    #handleIntersectionObserver(entries) {}
-
-    async #handleBottomObserver() {}
-
-    async #handleTopObserver() {}
-
-    /**
-     * Function uses `props.getTemplate` to update the html elements
-     * using provided data
-     *
-     * @param elements {HTMLElement[]} - HTML Elements to update
-     * @param data {T[]} - Data to use for update
-     */
-    #updateData(elements, data) {
-
+    #effect() {
+        intersectionObserver(
+            getObservers(),
+            this.#handleIntersection(),
+            {}
+        )
     }
 
     /**
-     * Move elements on the screen using CSS Transform
-     *
-     * @param direction {"top" | "down" }
+     * Callback implementation for Top and Bottom Intersection observers
+     * @return {IntersectionObserverCallback}
      */
-    #updateElementsPosition(direction) {
-        const [top, bottom] = getObservers();
-        if (direction === 'down') {
-
-        } else if (direction === 'top') {
-            // To implement
+    #handleIntersection() {
+        return (entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) {
+                    const id = entry.target.id;
+                    if (id === 'top-observer') {
+                        void this.#handleTopObserver()
+                    } else if (id === 'bottom-observer') {
+                        void this.#handleBottomObserver()
+                    }
+                }
+            }
         }
     }
+
+    /**
+     * Handles Bottom Observer Intersection event
+     * @returns Promise<void>
+     */
+    async #handleBottomObserver() {
+        const list = getList();
+        const data = await this.props.getPage(this.end++);
+        const fragment = new DocumentFragment();
+        data.map(datum => this.props.getTemplate(datum))
+            .forEach(el => fragment.appendChild(el));
+        list.appendChild(fragment);
+    }
+
+    /**
+     * Handles Top Observer Intersection event
+     * @returns Promise<void>
+     */
+    #handleTopObserver() {}
+
 }
